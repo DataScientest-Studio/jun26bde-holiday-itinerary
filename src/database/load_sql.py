@@ -40,13 +40,17 @@ def insert_poi(cur,poi):
     """Inserts one POI and returns its generated poi_id."""
     cur.execute(
         """
-        INSERT INTO poi (uuid, label, poi_kind, description, latitude, longitude, estimated_duration_min, last_update)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO poi (uuid, label, poi_kind, description, latitude, longitude, estimated_duration_min, last_update, cluster_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (uuid) DO UPDATE SET
             label = EXCLUDED.label,
             poi_kind = EXCLUDED.poi_kind,
             description = EXCLUDED.description,
-            last_update = EXCLUDED.last_update
+            latitude = EXCLUDED.latitude,
+            longitude = EXCLUDED.longitude,
+            estimated_duration_min = EXCLUDED.estimated_duration_min,
+            last_update = EXCLUDED.last_update,
+            cluster_id = EXCLUDED.cluster_id
         RETURNING poi_id
         """,
         (
@@ -58,6 +62,7 @@ def insert_poi(cur,poi):
             poi["longitude"],
             poi["estimated_duration_min"],
             poi["last_update"],
+            poi["cluster_id"]
         ),
     )
     return cur.fetchone()[0]
@@ -163,7 +168,7 @@ def load_pois(clean_data):
 
 if __name__ == "__main__":
 
-    with open("data/processed/pois_clean.json", "r", encoding="utf-8") as f:
+    with open("data/processed/pois_clustered.json", "r", encoding="utf-8") as f:
         clean_data = json.load(f)
 
     load_pois(clean_data)

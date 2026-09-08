@@ -8,7 +8,8 @@ CREATE TABLE poi (
     latitude DECIMAL(9,6),
     longitude DECIMAL(9,6),
     estimated_duration_min INT,
-    last_update DATE
+    last_update DATE,
+    cluster_id INTEGER
 );
 
 CREATE TABLE category (

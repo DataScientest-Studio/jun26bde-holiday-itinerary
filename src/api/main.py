@@ -13,7 +13,6 @@ from dotenv import load_dotenv
 from typing import Optional, Literal, List
 from pydantic import BaseModel, Field
 from neo4j import GraphDatabase
-import json
 
 from src.itinerary.itinerary_logic import (
     select_candidates,
@@ -58,6 +57,77 @@ class ItineraryRequest(BaseModel):
 
 def get_connection():
     return psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+
+def get_hotel_for_itinerary(hotel_uuid):
+        conn = get_connection()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            SELECT
+                uuid,
+                label,
+                poi_kind,
+                latitude,
+                longitude,
+                cluster_id
+            FROM poi
+            WHERE uuid = %s
+            AND poi_kind = 'lodging'
+            """,
+            (hotel_uuid,),
+        )
+
+        hotel = cur.fetchone()
+
+        cur.close()
+        conn.close()
+
+        return hotel
+
+def get_attraction_candidates(cluster_id):
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        SELECT
+            p.uuid,
+            p.label,
+            p.poi_kind,
+            p.description,
+            p.latitude,
+            p.longitude,
+            p.estimated_duration_min,
+            p.cluster_id,
+            ct.website,
+            COALESCE(
+                array_agg(DISTINCT c.name)
+                FILTER (WHERE c.name IS NOT NULL),
+                '{}'
+            ) AS categories
+        FROM poi p
+        LEFT JOIN poi_category pc
+            ON p.poi_id = pc.poi_id
+        LEFT JOIN category c
+            ON pc.category_id = c.category_id
+        LEFT JOIN contact ct
+            ON p.poi_id = ct.poi_id
+        WHERE p.poi_kind = 'attraction'
+          AND p.cluster_id = %s
+        GROUP BY
+            p.poi_id,
+            ct.website
+        """,
+        (cluster_id,),
+    )
+
+    rows = cur.fetchall()
+
+    cur.close()
+    conn.close()
+
+    return [dict(row) for row in rows]
 
 @app.get("/health")
 def health():
@@ -190,23 +260,10 @@ def generate_itinerary(request: ItineraryRequest):
 
     The selected hotel determines the geographical starting point.
     """
-    with open(
-        "data/processed/pois_clustered.json",
-        "r",
-        encoding = "utf-8"
-    ) as f:
-        pois = json.load(f)
   
-    hotel = next(
-        (
-            poi for poi in pois
-            if poi["uuid"] == request.hotel_uuid
-            and poi["poi_kind"] == "lodging"
-        ),
-        None
-    )
+    hotel = get_hotel_for_itinerary(request.hotel_uuid)
 
-    if hotel is None:
+    if not hotel:
         raise HTTPException(
             status_code=404,
             detail="Hotel not found"
@@ -214,12 +271,12 @@ def generate_itinerary(request: ItineraryRequest):
 
     cluster_id = hotel["cluster_id"]
 
+    pois = get_attraction_candidates(cluster_id)
+
     candidates = select_candidates(
-        pois=pois,
-        cluster_id=cluster_id,
-        preferred_categories=request.preferred_categories,
-        poi_kind="attraction",
-        top_n=20
+        pois,
+        cluster_id,
+        request.preferred_categories,
     )
 
     if not candidates:

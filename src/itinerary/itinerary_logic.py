@@ -6,7 +6,6 @@ Uses Neo4j to find nearby attractions, estimates travel time and builds itinerar
 based on preferred number of days.
 """
 
-import json
 import os
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
