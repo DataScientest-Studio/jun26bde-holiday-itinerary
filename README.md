@@ -306,5 +306,24 @@ Before running the project, make sure you have:
 Create a .env file based on .env.example you can find in the repository.
 
 ## Start the project
+### 1. → Start all containers
 
     docker compose up -d --build
+    
+### 2. → Initialise the data pipeline
+
+After starting the containers, run the Airflow DAG once to extract, transform, cluster and load the data to PostgreSQL and Neo4j databases.
+Wait until all tasks are successful before using the Streamlit application.
+
+Open Airflow at:
+
+    http://localhost:8080
+
+Retrieve the generated username and password for airflow:
+
+    docker compose exec airflow-webserver \
+    cat /opt/airflow/simple_auth_manager_passwords.json.generated
+
+### 3. → Open Streamlit at:
+   
+    http://localhost:8501
