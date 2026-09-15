@@ -8,6 +8,7 @@ POIs, categories, addresses and contacts and many-to-many category relationships
 import os
 import json
 import psycopg2
+import ast
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,8 +21,10 @@ DB_CONFIG = {
     "password": os.environ.get("POSTGRES_PASSWORD"),
 }
 
+
 def get_connection():
     return psycopg2.connect(**DB_CONFIG)
+
 
 def clear_database(cur):
     cur.execute(
@@ -36,7 +39,8 @@ def clear_database(cur):
         """
     )
 
-def insert_poi(cur,poi):
+
+def insert_poi(cur, poi):
     """Inserts one POI and returns its generated poi_id."""
     cur.execute(
         """
@@ -62,7 +66,7 @@ def insert_poi(cur,poi):
             poi["longitude"],
             poi["estimated_duration_min"],
             poi["last_update"],
-            poi["cluster_id"]
+            poi["cluster_id"],
         ),
     )
     return cur.fetchone()[0]
@@ -103,7 +107,14 @@ def insert_address(cur, poi_id, poi):
             department = EXCLUDED.department,
             region = EXCLUDED.region
         """,
-        (poi_id, poi["street_address"], poi["city"], poi["postal_code"], poi["department"], poi["region"]),
+        (
+            poi_id,
+            poi["street_address"],
+            poi["city"],
+            poi["postal_code"],
+            poi["department"],
+            poi["region"],
+        ),
     )
 
 
@@ -120,6 +131,7 @@ def insert_contact(cur, poi_id, poi):
         (poi_id, poi["phone"], poi["website"]),
     )
 
+
 def init_db(conn):
     schema_path = "sql/schema.sql"
     with open(schema_path, "r", encoding="utf-8") as f:
@@ -127,6 +139,7 @@ def init_db(conn):
     with conn.cursor() as cur:
         cur.execute(schema_sql)
     conn.commit()
+
 
 def load_pois(clean_data):
     """
@@ -140,10 +153,12 @@ def load_pois(clean_data):
     """
     conn = get_connection()
 
+    # Executing the schema creation so the users and saved_trips tables are built!
+    init_db(conn)
+
     cur = conn.cursor()
 
     try:
-
         clear_database(cur)
 
         for poi in clean_data:
@@ -151,9 +166,18 @@ def load_pois(clean_data):
             insert_address(cur, poi_id, poi)
             insert_contact(cur, poi_id, poi)
 
-            for category_name in poi["categories"]:
-                category_id = insert_category(cur, category_name)
-                insert_poi_category(cur, poi_id, category_id)
+            categories = poi.get("categories", [])
+
+            if isinstance(categories, str):
+                try:
+                    categories = ast.literal_eval(categories)
+                except (ValueError, SyntaxError):
+                    categories = []
+
+            if isinstance(categories, list):
+                for category_name in categories:
+                    category_id = insert_category(cur, category_name)
+                    insert_poi_category(cur, poi_id, category_id)
 
         conn.commit()
         print(f"Loaded {len(clean_data)} POIs into the database.")
@@ -167,7 +191,6 @@ def load_pois(clean_data):
 
 
 if __name__ == "__main__":
-
     with open("data/processed/pois_clustered.json", "r", encoding="utf-8") as f:
         clean_data = json.load(f)
 

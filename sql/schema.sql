@@ -1,4 +1,4 @@
-DROP TABLE IF EXISTS poi_review_label, review_label, contact, address, poi_category, category, poi;
+DROP TABLE IF EXISTS itinerary_stops, saved_itineraries, users, poi_review_label, review_label, contact, address, poi_category, category, poi CASCADE;
 
 CREATE TABLE poi (
     poi_id SERIAL PRIMARY KEY,
@@ -39,3 +39,22 @@ CREATE TABLE contact (
 );
 
 ALTER TABLE poi ADD poi_kind VARCHAR(20) NOT NULL DEFAULT 'attraction';
+
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL
+);
+
+CREATE TABLE saved_itineraries (
+    itinerary_id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE itinerary_stops (
+    stop_id SERIAL PRIMARY KEY,
+    itinerary_id INT REFERENCES saved_itineraries(itinerary_id) ON DELETE CASCADE,
+    poi_uuid VARCHAR(64) REFERENCES poi(uuid) ON DELETE CASCADE,
+    day_number INT NOT NULL,
+    stop_order INT NOT NULL
+);

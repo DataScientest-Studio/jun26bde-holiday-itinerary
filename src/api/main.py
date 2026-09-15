@@ -55,6 +55,10 @@ class ItineraryRequest(BaseModel):
     lunch: bool = True
     dinner: bool = True
 
+class SaveItineraryRequest(BaseModel):
+    email: str
+    itinerary: list
+
 def get_connection():
     return psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
 
@@ -257,20 +261,14 @@ def list_categories(
 def generate_itinerary(request: ItineraryRequest):
     """
     Generate a multi-day itinerary.
-
     The selected hotel determines the geographical starting point.
     """
-  
     hotel = get_hotel_for_itinerary(request.hotel_uuid)
 
     if not hotel:
-        raise HTTPException(
-            status_code=404,
-            detail="Hotel not found"
-        )
+        raise HTTPException(status_code=404, detail="Hotel not found")
 
     cluster_id = hotel["cluster_id"]
-
     pois = get_attraction_candidates(cluster_id)
 
     candidates = select_candidates(
@@ -281,13 +279,10 @@ def generate_itinerary(request: ItineraryRequest):
 
     if not candidates:
         raise HTTPException(
-            status_code=404,
-            detail="No attractions found for selected preferences"
+            status_code=404, detail="No attractions found for selected preferences"
         )
 
-    candidate_uuids = [
-        poi["uuid"] for poi in candidates
-    ]
+    candidate_uuids = [poi["uuid"] for poi in candidates]
 
     itinerary = build_itinerary(
         driver=driver,
@@ -300,11 +295,9 @@ def generate_itinerary(request: ItineraryRequest):
         daily_minutes=600
     )
 
-    # Adding metadata for POI stored in PostgreSQL.
     for day in itinerary:
         for poi in day["pois"]:
             details = get_poi(poi["uuid"])
-
             poi["description"] = details["description"]
             poi["phone"] = details["phone"]
             poi["website"] = details["website"]
@@ -312,3 +305,97 @@ def generate_itinerary(request: ItineraryRequest):
             poi["city"] = details["city"]
 
     return itinerary
+
+@app.post("/itineraries/save")
+def save_user_itinerary(request: SaveItineraryRequest):
+    """Saves a generated itinerary for a specific user."""
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute("SELECT user_id FROM users WHERE email = %s", (request.email,))
+        user = cur.fetchone()
+        
+        if user:
+            user_id = user["user_id"]
+        else:
+            cur.execute(
+                "INSERT INTO users (email) VALUES (%s) RETURNING user_id", 
+                (request.email,)
+            )
+            user_id = cur.fetchone()["user_id"]
+            
+        cur.execute(
+            "INSERT INTO saved_itineraries (user_id) VALUES (%s) RETURNING itinerary_id",
+            (user_id,)
+        )
+        itinerary_id = cur.fetchone()["itinerary_id"]
+        
+        for day in request.itinerary:
+            day_num = day["day"]
+            order = 1
+            for poi in day["pois"]:
+                cur.execute(
+                    """
+                    INSERT INTO itinerary_stops (itinerary_id, poi_uuid, day_number, stop_order)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (itinerary_id, poi["uuid"], day_num, order)
+                )
+                order += 1
+                
+        conn.commit()
+        return {"status": "success", "itinerary_id": itinerary_id}
+        
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.get("/itineraries/{email}")
+def get_user_itineraries(email: str):
+    """Retrieves all saved itineraries for a specific user email."""
+    conn = get_connection()
+    cur = conn.cursor()
+    
+    try:
+        cur.execute("SELECT user_id FROM users WHERE email = %s", (email,))
+        user = cur.fetchone()
+        
+        if not user:
+            return []
+            
+        cur.execute(
+            """
+            SELECT itinerary_id, TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI') as created_date
+            FROM saved_itineraries 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC
+            """,
+            (user["user_id"],)
+        )
+        itineraries = cur.fetchall()
+        
+        for itinerary in itineraries:
+            cur.execute(
+                """
+                SELECT s.day_number, s.stop_order, p.label, p.poi_kind, a.city 
+                FROM itinerary_stops s
+                JOIN poi p ON s.poi_uuid = p.uuid
+                LEFT JOIN address a ON p.poi_id = a.poi_id
+                WHERE s.itinerary_id = %s
+                ORDER BY s.day_number, s.stop_order
+                """,
+                (itinerary["itinerary_id"],)
+            )
+            itinerary["stops"] = cur.fetchall()
+            
+        return itineraries
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
