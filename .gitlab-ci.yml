@@ -1,0 +1,38 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'push'
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+
+image: python:3.12-slim
+
+stages:
+  - test
+  - lint
+  - build
+
+unit_tests:
+  stage: test
+  script:
+    - pip install -r requirements.txt
+    - pip install -r requirements-dev.txt
+    - pytest
+
+lint:
+  stage: lint
+  script:
+    - pip install -r requirements-dev.txt
+    - ruff check src tests
+
+build_app:
+  stage: build
+  tags:
+    - mac
+  script:
+    - docker build -t holiday-itinerary .
+
+build_airflow:
+  stage: build
+  tags:
+    - mac
+  script:
+    - docker build -f Dockerfile.airflow -t holiday-itinerary-airflow .
