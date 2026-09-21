@@ -2,8 +2,10 @@
 __pycache__/
 *.py[cod]
 
-# C extensions
-*.so
+# environment
+.env
+.env.*
+!.env.example
 
 # Distribution / packaging
 .Python
@@ -19,9 +21,13 @@ lib64/
 parts/
 sdist/
 var/
+venv/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Jupyter
+.ipynb_checkpoints/
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -33,57 +39,72 @@ var/
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
+# Test / cache files
+.pytest_cache/
 .coverage
 .coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
-# Translations
-*.mo
-*.pot
-
-# Django stuff:
+# Logs
 *.log
+logs/
+airflow_logs/
 
-# Sphinx documentation
-docs/_build/
+# Airflow local/generated files
+airflow.db
+airflow.cfg
+airflow-webserver.pid
+simple_auth_manager_passwords.json.generated
 
-# PyBuilder
-target/
-
-# DotEnv configuration
-.env
-
-# Database
+# Local databases
 *.db
+*.sqlite
+*.sqlite3
 *.rdb
 
-# Pycharm
-.idea
+# Docker local overrides
+docker-compose.override.yml
+compose.override.yml
 
-# VS Code
+# IDEs
 .vscode/
+.idea/
 
-# Spyder
-.spyproject/
-
-# Jupyter NB Checkpoints
-.ipynb_checkpoints/
-
-# exclude data from source control by default
-/data/
-
-# Mac OS-specific storage files
+# macOS
 .DS_Store
 
-# vim
+# Temporary files
+*.tmp
 *.swp
 *.swo
+tmp/
+temp/
 
-# Mypy cache
-.mypy_cache/
+# Local keys / certificates
+*.pem
+*.key
+*.crt
+
+# Local credentials / secrets
+credentials.json
+secrets.json
+
+# Data files
+data/*
+!data/raw/
+!data/interim/
+!data/processed/
+
+data/raw/*
+data/interim/*
+data/processed/*
+
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Reports
+reports/*
+!reports/.gitkeep
